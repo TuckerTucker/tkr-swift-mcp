@@ -17,7 +17,15 @@ let package = Package(
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
                 .product(name: "Logging", package: "swift-log"),
             ],
-            path: "Sources/TKRMCPServer"
+            path: "Sources/TKRMCPServer",
+            linkerSettings: [
+                .unsafeFlags([
+                    "-Xlinker", "-sectcreate",
+                    "-Xlinker", "__TEXT",
+                    "-Xlinker", "__info_plist",
+                    "-Xlinker", "Info.plist",
+                ]),
+            ]
         ),
         .testTarget(
             name: "TKRMCPServerTests",
