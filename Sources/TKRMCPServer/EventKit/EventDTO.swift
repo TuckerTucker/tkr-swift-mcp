@@ -38,12 +38,11 @@ struct ReminderDTO: Codable, Equatable, Sendable {
 
 extension EventDTO {
     static func from(_ event: EKEvent) -> EventDTO {
-        let fmt = ISO8601DateFormatter()
         var dto = EventDTO(
             id: event.eventIdentifier ?? "",
             title: event.title ?? "",
-            startDate: fmt.string(from: event.startDate),
-            endDate: fmt.string(from: event.endDate),
+            startDate: iso8601Formatter.string(from: event.startDate),
+            endDate: iso8601Formatter.string(from: event.endDate),
             isAllDay: event.isAllDay,
             calendar: event.calendar?.title ?? ""
         )
@@ -56,7 +55,6 @@ extension EventDTO {
 
 extension ReminderDTO {
     static func from(_ reminder: EKReminder) -> ReminderDTO {
-        let fmt = ISO8601DateFormatter()
         var dto = ReminderDTO(
             id: reminder.calendarItemIdentifier,
             title: reminder.title ?? "",
@@ -66,10 +64,10 @@ extension ReminderDTO {
         )
         if let notes = reminder.notes, !notes.isEmpty { dto.notes = notes }
         if let due = reminder.dueDateComponents, let date = Calendar.current.date(from: due) {
-            dto.dueDate = fmt.string(from: date)
+            dto.dueDate = iso8601Formatter.string(from: date)
         }
         if let completionDate = reminder.completionDate {
-            dto.completionDate = fmt.string(from: completionDate)
+            dto.completionDate = iso8601Formatter.string(from: completionDate)
         }
         return dto
     }

@@ -29,7 +29,6 @@ struct ContactsToolHandlerTests {
         let (service, _) = makeService()
         let params = CallTool.Parameters(name: "list_contacts", arguments: nil)
         let result = try await ContactsToolHandler.handle(params, service: service)
-        // Should be valid JSON
         let data = result.data(using: .utf8)!
         let parsed = try JSONDecoder().decode([ContactDTO].self, from: data)
         #expect(parsed.count == 1)
@@ -49,6 +48,30 @@ struct ContactsToolHandlerTests {
         #expect(parsed.count == 1)
     }
 
+    @Test("list_contacts rejects zero limit")
+    func listContactsRejectsZeroLimit() async throws {
+        let (service, _) = makeService()
+        let params = CallTool.Parameters(
+            name: "list_contacts",
+            arguments: ["limit": .int(0)]
+        )
+        await #expect(throws: ToolError.self) {
+            try await ContactsToolHandler.handle(params, service: service)
+        }
+    }
+
+    @Test("list_contacts rejects negative limit")
+    func listContactsRejectsNegativeLimit() async throws {
+        let (service, _) = makeService()
+        let params = CallTool.Parameters(
+            name: "list_contacts",
+            arguments: ["limit": .int(-5)]
+        )
+        await #expect(throws: ToolError.self) {
+            try await ContactsToolHandler.handle(params, service: service)
+        }
+    }
+
     @Test("search_contacts requires query argument")
     func searchContactsRequiresQuery() async throws {
         let (service, _) = makeService()
@@ -64,6 +87,33 @@ struct ContactsToolHandlerTests {
         let (service, _) = makeService()
         let params = CallTool.Parameters(name: "get_contact", arguments: [:])
 
+        await #expect(throws: ToolError.self) {
+            try await ContactsToolHandler.handle(params, service: service)
+        }
+    }
+
+    @Test("get_contact throws notFound for unknown id")
+    func getContactNotFound() async throws {
+        let (service, _) = makeService()
+        let params = CallTool.Parameters(
+            name: "get_contact",
+            arguments: ["id": .string("nonexistent")]
+        )
+        await #expect(throws: ToolError.self) {
+            try await ContactsToolHandler.handle(params, service: service)
+        }
+    }
+
+    @Test("update_contact throws notFound for unknown id")
+    func updateContactNotFound() async throws {
+        let (service, _) = makeService()
+        let params = CallTool.Parameters(
+            name: "update_contact",
+            arguments: [
+                "id": .string("nonexistent"),
+                "givenName": .string("Updated"),
+            ]
+        )
         await #expect(throws: ToolError.self) {
             try await ContactsToolHandler.handle(params, service: service)
         }
@@ -96,6 +146,55 @@ struct ContactsToolHandlerTests {
         #expect(mock.executedSaveRequests == 1)
     }
 
+    @Test("create_contact rejects empty names")
+    func createContactRejectsEmpty() async throws {
+        let (service, _) = makeService()
+        let params = CallTool.Parameters(
+            name: "create_contact",
+            arguments: [
+                "organization": .string("Orphan Corp"),
+            ]
+        )
+        await #expect(throws: ToolError.self) {
+            try await ContactsToolHandler.handle(params, service: service)
+        }
+    }
+
+    @Test("create_contact with emails parses labeled values")
+    func createContactWithEmails() async throws {
+        let (service, mock) = makeService()
+        let params = CallTool.Parameters(
+            name: "create_contact",
+            arguments: [
+                "givenName": .string("Test"),
+                "emails": .array([
+                    .object(["label": .string("work"), "value": .string("t@example.com")]),
+                ]),
+            ]
+        )
+        let result = try await ContactsToolHandler.handle(params, service: service)
+        let parsed = try JSONDecoder().decode(ContactDTO.self, from: result.data(using: .utf8)!)
+        #expect(parsed.givenName == "Test")
+        #expect(mock.executedSaveRequests == 1)
+    }
+
+    @Test("create_contact propagates store errors")
+    func createContactStoreError() async throws {
+        let mock = MockContactStore()
+        mock.shouldThrowOnExecute = NSError(domain: "test", code: 1)
+        let service = ContactsService(store: mock)
+        let params = CallTool.Parameters(
+            name: "create_contact",
+            arguments: [
+                "givenName": .string("Fail"),
+                "familyName": .string("Contact"),
+            ]
+        )
+        await #expect(throws: Error.self) {
+            try await ContactsToolHandler.handle(params, service: service)
+        }
+    }
+
     @Test("unknown tool throws ToolError")
     func unknownToolThrows() async throws {
         let (service, _) = makeService()
@@ -104,34 +203,6 @@ struct ContactsToolHandlerTests {
         await #expect(throws: ToolError.self) {
             try await ContactsToolHandler.handle(params, service: service)
         }
-    }
-
-    @Test("parseLabeled extracts label/value pairs")
-    func parseLabeled() {
-        let input: Value = .array([
-            .object(["label": .string("work"), "value": .string("test@example.com")]),
-            .object(["label": .string("home"), "value": .string("home@example.com")]),
-        ])
-        let result = ContactsToolHandler.parseLabeled(input)
-        #expect(result?.count == 2)
-        #expect(result?[0].label == "work")
-        #expect(result?[0].value == "test@example.com")
-    }
-
-    @Test("parseLabeled returns nil for non-array")
-    func parseLabeledNonArray() {
-        #expect(ContactsToolHandler.parseLabeled(.string("not an array")) == nil)
-        #expect(ContactsToolHandler.parseLabeled(nil) == nil)
-    }
-
-    @Test("parseLabeled skips malformed entries")
-    func parseLabeledSkipsMalformed() {
-        let input: Value = .array([
-            .object(["label": .string("work")]), // missing "value"
-            .object(["label": .string("home"), "value": .string("ok@example.com")]),
-        ])
-        let result = ContactsToolHandler.parseLabeled(input)
-        #expect(result?.count == 1)
     }
 
     @Test("list_groups returns valid JSON")

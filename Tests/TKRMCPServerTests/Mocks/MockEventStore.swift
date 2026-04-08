@@ -15,6 +15,9 @@ final class MockEventStore: EventStoreProviding, @unchecked Sendable {
     var storedReminders: [EKReminder] = []
     var storedCalendars: [EKCalendar] = []
 
+    /// Set to a non-nil error to make save/remove throw.
+    var shouldThrowOnSave: Error?
+
     // Call tracking
     private(set) var savedEvents: Int = 0
     private(set) var removedEvents: Int = 0
@@ -70,6 +73,7 @@ final class MockEventStore: EventStoreProviding, @unchecked Sendable {
     }
 
     func save(_ event: EKEvent, span: EKSpan) throws {
+        if let error = shouldThrowOnSave { throw error }
         savedEvents += 1
         if !storedEvents.contains(where: { $0 === event }) {
             storedEvents.append(event)
@@ -120,6 +124,7 @@ final class MockEventStore: EventStoreProviding, @unchecked Sendable {
     }
 
     func save(_ reminder: EKReminder, commit: Bool) throws {
+        if let error = shouldThrowOnSave { throw error }
         savedReminders += 1
         if !storedReminders.contains(where: { $0 === reminder }) {
             storedReminders.append(reminder)

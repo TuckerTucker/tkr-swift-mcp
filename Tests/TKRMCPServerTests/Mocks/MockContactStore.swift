@@ -9,6 +9,9 @@ final class MockContactStore: ContactStoreProviding, @unchecked Sendable {
     var groups: [CNMutableGroup] = []
     var accessGranted: Bool = true
 
+    /// Set to a non-nil error to make execute() throw on next call.
+    var shouldThrowOnExecute: Error?
+
     // Call tracking
     private(set) var executedSaveRequests: Int = 0
 
@@ -42,6 +45,9 @@ final class MockContactStore: ContactStoreProviding, @unchecked Sendable {
     }
 
     func execute(_ request: CNSaveRequest) throws {
+        if let error = shouldThrowOnExecute {
+            throw error
+        }
         executedSaveRequests += 1
     }
 

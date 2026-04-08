@@ -136,7 +136,7 @@ enum ContactsToolHandler {
             guard let query = args["query"]?.stringValue else {
                 throw ToolError.invalidArguments("query is required")
             }
-            let limit = args["limit"]?.intValue ?? 50
+            let limit = try validLimit(args["limit"]?.intValue, default: 50)
             let contacts = try await service.searchContacts(query: query, limit: limit)
             return try encodeJSON(contacts)
 
@@ -144,13 +144,13 @@ enum ContactsToolHandler {
             guard let id = args["id"]?.stringValue else {
                 throw ToolError.invalidArguments("id is required")
             }
-            if let contact = try await service.getContact(identifier: id) {
-                return try encodeJSON(contact)
+            guard let contact = try await service.getContact(identifier: id) else {
+                throw ToolError.notFound("Contact '\(id)' not found")
             }
-            return try encodeJSON(["error": "Contact not found"])
+            return try encodeJSON(contact)
 
         case "list_contacts":
-            let limit = args["limit"]?.intValue ?? 100
+            let limit = try validLimit(args["limit"]?.intValue, default: 100)
             let contacts = try await service.listContacts(limit: limit)
             return try encodeJSON(contacts)
 
@@ -162,16 +162,21 @@ enum ContactsToolHandler {
             guard let groupID = args["groupID"]?.stringValue else {
                 throw ToolError.invalidArguments("groupID is required")
             }
-            let limit = args["limit"]?.intValue ?? 100
+            let limit = try validLimit(args["limit"]?.intValue, default: 100)
             let contacts = try await service.listContactsInGroup(groupID: groupID, limit: limit)
             return try encodeJSON(contacts)
 
         case "create_contact":
+            let givenName = args["givenName"]?.stringValue
+            let familyName = args["familyName"]?.stringValue
+            if (givenName ?? "").isEmpty && (familyName ?? "").isEmpty {
+                throw ToolError.invalidArguments("at least one of givenName or familyName is required")
+            }
             let emails = parseLabeled(args["emails"])
             let phones = parseLabeled(args["phones"])
             let contact = try await service.createContact(
-                givenName: args["givenName"]?.stringValue,
-                familyName: args["familyName"]?.stringValue,
+                givenName: givenName,
+                familyName: familyName,
                 organization: args["organization"]?.stringValue,
                 jobTitle: args["jobTitle"]?.stringValue,
                 emails: emails,
@@ -184,17 +189,17 @@ enum ContactsToolHandler {
             guard let id = args["id"]?.stringValue else {
                 throw ToolError.invalidArguments("id is required")
             }
-            if let contact = try await service.updateContact(
+            guard let contact = try await service.updateContact(
                 identifier: id,
                 givenName: args["givenName"]?.stringValue,
                 familyName: args["familyName"]?.stringValue,
                 organization: args["organization"]?.stringValue,
                 jobTitle: args["jobTitle"]?.stringValue,
                 notes: args["notes"]?.stringValue
-            ) {
-                return try encodeJSON(contact)
+            ) else {
+                throw ToolError.notFound("Contact '\(id)' not found")
             }
-            return try encodeJSON(["error": "Contact not found"])
+            return try encodeJSON(contact)
 
         case "delete_contact":
             guard let id = args["id"]?.stringValue else {
@@ -208,8 +213,17 @@ enum ContactsToolHandler {
         }
     }
 
+    /// Validates a limit parameter, returning the default if nil or throwing if < 1.
+    private static func validLimit(_ value: Int?, default defaultValue: Int) throws -> Int {
+        guard let value else { return defaultValue }
+        guard value >= 1 else {
+            throw ToolError.invalidArguments("limit must be >= 1, got \(value)")
+        }
+        return value
+    }
+
     /// Parses an array of `{label, value}` objects from MCP `Value`.
-    static func parseLabeled(_ value: Value?) -> [(label: String, value: String)]? {
+    private static func parseLabeled(_ value: Value?) -> [(label: String, value: String)]? {
         guard case .array(let items) = value else { return nil }
         return items.compactMap { item -> (label: String, value: String)? in
             guard case .object(let obj) = item,

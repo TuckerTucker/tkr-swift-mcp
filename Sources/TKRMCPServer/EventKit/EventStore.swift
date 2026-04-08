@@ -3,7 +3,7 @@ import Foundation
 
 /// Production conformance delegating to `EKEventStore`.
 final class EventStore: EventStoreProviding, @unchecked Sendable {
-    let store = EKEventStore()
+    private let store = EKEventStore()
 
     func requestCalendarAccess() async throws -> Bool {
         if #available(macOS 14.0, *) {

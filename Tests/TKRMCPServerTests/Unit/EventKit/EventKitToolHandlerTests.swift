@@ -42,8 +42,19 @@ struct EventKitToolHandlerTests {
         let result = try await EventKitToolHandler.handle(params, service: service)
         let data = result.data(using: .utf8)!
         let parsed = try JSONDecoder().decode([CalendarDTO].self, from: data)
-        // Mock has no calendars, so empty array
         #expect(parsed.isEmpty)
+    }
+
+    @Test("list_calendars rejects invalid type")
+    func listCalendarsRejectsInvalidType() async throws {
+        let (service, _) = makeService()
+        let params = CallTool.Parameters(
+            name: "list_calendars",
+            arguments: ["type": .string("invalid")]
+        )
+        await #expect(throws: ToolError.self) {
+            try await EventKitToolHandler.handle(params, service: service)
+        }
     }
 
     @Test("list_events requires startDate and endDate")
@@ -59,7 +70,7 @@ struct EventKitToolHandlerTests {
     @Test("list_events with valid dates returns JSON")
     func listEventsWithDates() async throws {
         let (service, _) = makeService()
-        let fmt = ISO8601DateFormatter()
+        let fmt = iso8601Formatter
         let start = fmt.string(from: Date().addingTimeInterval(-86400))
         let end = fmt.string(from: Date().addingTimeInterval(86400))
 
@@ -106,10 +117,51 @@ struct EventKitToolHandlerTests {
         }
     }
 
+    @Test("create_event rejects endDate before startDate")
+    func createEventRejectsInvertedDates() async throws {
+        let (service, _) = makeService()
+        let fmt = iso8601Formatter
+        let later = fmt.string(from: Date().addingTimeInterval(7200))
+        let earlier = fmt.string(from: Date())
+
+        let params = CallTool.Parameters(
+            name: "create_event",
+            arguments: [
+                "title": .string("Bad dates"),
+                "startDate": .string(later),
+                "endDate": .string(earlier),
+            ]
+        )
+        await #expect(throws: ToolError.self) {
+            try await EventKitToolHandler.handle(params, service: service)
+        }
+    }
+
+    @Test("create_event rejects invalid calendarID")
+    func createEventRejectsInvalidCalendar() async throws {
+        let (service, _) = makeService()
+        let fmt = iso8601Formatter
+        let start = fmt.string(from: Date())
+        let end = fmt.string(from: Date().addingTimeInterval(3600))
+
+        let params = CallTool.Parameters(
+            name: "create_event",
+            arguments: [
+                "title": .string("Bad cal"),
+                "startDate": .string(start),
+                "endDate": .string(end),
+                "calendarID": .string("nonexistent-calendar-id"),
+            ]
+        )
+        await #expect(throws: ToolError.self) {
+            try await EventKitToolHandler.handle(params, service: service)
+        }
+    }
+
     @Test("create_event with valid args saves and returns JSON")
     func createEventValid() async throws {
         let (service, mock) = makeService()
-        let fmt = ISO8601DateFormatter()
+        let fmt = iso8601Formatter
         let start = fmt.string(from: Date())
         let end = fmt.string(from: Date().addingTimeInterval(3600))
 
@@ -128,6 +180,28 @@ struct EventKitToolHandlerTests {
         #expect(parsed.title == "New Event")
         #expect(parsed.location == "Room B")
         #expect(mock.savedEvents == 1)
+    }
+
+    @Test("create_event propagates store errors")
+    func createEventStoreError() async throws {
+        let mock = MockEventStore()
+        mock.shouldThrowOnSave = NSError(domain: "test", code: 1)
+        let service = EventKitService(store: mock)
+        let fmt = iso8601Formatter
+        let start = fmt.string(from: Date())
+        let end = fmt.string(from: Date().addingTimeInterval(3600))
+
+        let params = CallTool.Parameters(
+            name: "create_event",
+            arguments: [
+                "title": .string("Fail"),
+                "startDate": .string(start),
+                "endDate": .string(end),
+            ]
+        )
+        await #expect(throws: Error.self) {
+            try await EventKitToolHandler.handle(params, service: service)
+        }
     }
 
     @Test("delete_event requires eventID")
@@ -172,6 +246,19 @@ struct EventKitToolHandlerTests {
     func completeReminderRequiresID() async throws {
         let (service, _) = makeService()
         let params = CallTool.Parameters(name: "complete_reminder", arguments: [:])
+
+        await #expect(throws: ToolError.self) {
+            try await EventKitToolHandler.handle(params, service: service)
+        }
+    }
+
+    @Test("complete_reminder requires completed boolean")
+    func completeReminderRequiresCompleted() async throws {
+        let (service, _) = makeService()
+        let params = CallTool.Parameters(
+            name: "complete_reminder",
+            arguments: ["reminderID": .string("some-id")]
+        )
 
         await #expect(throws: ToolError.self) {
             try await EventKitToolHandler.handle(params, service: service)

@@ -136,7 +136,9 @@ actor ContactsService {
             return nil
         }
 
-        let mutable = contact.mutableCopy() as! CNMutableContact
+        guard let mutable = contact.mutableCopy() as? CNMutableContact else {
+            return nil
+        }
         if let givenName { mutable.givenName = givenName }
         if let familyName { mutable.familyName = familyName }
         if let organization { mutable.organizationName = organization }
@@ -161,7 +163,9 @@ actor ContactsService {
             return false
         }
 
-        let mutable = contact.mutableCopy() as! CNMutableContact
+        guard let mutable = contact.mutableCopy() as? CNMutableContact else {
+            return false
+        }
         let saveRequest = CNSaveRequest()
         saveRequest.delete(mutable)
         try store.execute(saveRequest)
@@ -174,9 +178,13 @@ actor ContactsService {
         switch label.lowercased() {
         case "home": return CNLabelHome
         case "work": return CNLabelWork
+        case "other": return CNLabelOther
         case "mobile": return CNLabelPhoneNumberMobile
         case "main": return CNLabelPhoneNumberMain
         case "iphone": return CNLabelPhoneNumberiPhone
+        case "fax", "home fax": return CNLabelPhoneNumberHomeFax
+        case "work fax": return CNLabelPhoneNumberWorkFax
+        case "pager": return CNLabelPhoneNumberPager
         default: return label
         }
     }

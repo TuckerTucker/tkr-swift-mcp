@@ -98,8 +98,12 @@ extension ContactDTO {
             }
         }
 
-        if let birthday = contact.birthday, let date = Calendar.current.date(from: birthday) {
-            dto.birthday = ISO8601DateFormatter().string(from: date)
+        if let birthday = contact.birthday {
+            var utcCalendar = Calendar(identifier: .gregorian)
+            utcCalendar.timeZone = TimeZone(identifier: "UTC")!
+            if let date = utcCalendar.date(from: birthday) {
+                dto.birthday = iso8601Formatter.string(from: date)
+            }
         }
 
         return dto

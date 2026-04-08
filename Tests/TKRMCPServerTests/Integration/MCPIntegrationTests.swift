@@ -224,4 +224,37 @@ struct MCPIntegrationTests {
         #expect(reminder.title == "Integration test reminder")
         #expect(reminder.priority == 1)
     }
+
+    @Test("callTool get_contact not found returns isError true")
+    func callToolGetContactNotFound() async throws {
+        let (client, _) = try await makeClientAndServer()
+        let result = try await client.callTool(
+            name: "get_contact",
+            arguments: ["id": .string("nonexistent-id")]
+        )
+        #expect(result.isError == true)
+        guard case .text(let text, _, _) = result.content.first else {
+            Issue.record("Expected text content")
+            return
+        }
+        #expect(text.contains("Not found"))
+    }
+
+    @Test("callTool create_event validates date order")
+    func callToolCreateEventDateValidation() async throws {
+        let (client, _) = try await makeClientAndServer()
+        let fmt = iso8601Formatter
+        let later = fmt.string(from: Date().addingTimeInterval(7200))
+        let earlier = fmt.string(from: Date())
+
+        let result = try await client.callTool(
+            name: "create_event",
+            arguments: [
+                "title": .string("Bad event"),
+                "startDate": .string(later),
+                "endDate": .string(earlier),
+            ]
+        )
+        #expect(result.isError == true)
+    }
 }

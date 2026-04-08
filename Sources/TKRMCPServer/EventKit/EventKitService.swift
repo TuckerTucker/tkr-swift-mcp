@@ -32,6 +32,11 @@ actor EventKitService {
         }
     }
 
+    /// Checks whether a calendar with the given identifier exists.
+    func calendarExists(identifier: String) -> Bool {
+        store.calendar(withIdentifier: identifier) != nil
+    }
+
     // MARK: - Events
 
     func listEvents(calendarID: String?, startDate: Date, endDate: Date) -> [EventDTO] {
@@ -74,11 +79,11 @@ actor EventKitService {
         return EventDTO.from(event)
     }
 
-    func deleteEvent(eventID: String) throws -> Bool {
+    func deleteEvent(eventID: String, span: EKSpan = .thisEvent) throws -> Bool {
         guard let event = store.event(withIdentifier: eventID) else {
             return false
         }
-        try store.remove(event, span: .thisEvent)
+        try store.remove(event, span: span)
         return true
     }
 

@@ -1,4 +1,4 @@
-import EventKit
+@preconcurrency import EventKit
 import Foundation
 import Testing
 @testable import TKRMCPServer
@@ -9,16 +9,34 @@ import Testing
 @Suite("EventKit E2E", .enabled(if: ProcessInfo.processInfo.environment["SKIP_E2E"] == nil))
 struct EventKitE2ETests {
 
+    /// Directly deletes an event via EKEventStore (for cleanup outside actor context).
+    private func cleanupEvent(identifier: String, store: EKEventStore) {
+        guard let event = store.event(withIdentifier: identifier) else { return }
+        try? store.remove(event, span: .thisEvent)
+    }
+
+    /// Directly deletes a reminder via EKEventStore (for cleanup outside actor context).
+    private func cleanupReminder(identifier: String, store: EKEventStore) {
+        guard let reminder = store.calendarItem(withIdentifier: identifier) as? EKReminder else { return }
+        try? store.remove(reminder, commit: true)
+    }
+
     @Test("Event CRUD cycle")
     func eventCRUDCycle() async throws {
-        let store = EventStore()
-        let calAccess = try await store.requestCalendarAccess()
-        try #require(calAccess, "Calendar access denied — grant in System Settings")
+        let ekStore = EKEventStore()
+        if #available(macOS 14.0, *) {
+            let access = try await ekStore.requestFullAccessToEvents()
+            try #require(access, "Calendar access denied — grant in System Settings")
+        } else {
+            let access = try await ekStore.requestAccess(to: .event)
+            try #require(access, "Calendar access denied — grant in System Settings")
+        }
 
+        let store = EventStore()
         let service = EventKitService(store: store)
 
         // Create
-        let start = Date().addingTimeInterval(86400) // tomorrow
+        let start = Date().addingTimeInterval(86400)
         let end = start.addingTimeInterval(3600)
         let created = try await service.createEvent(
             title: "[MCP-TEST] E2E Event",
@@ -29,9 +47,13 @@ struct EventKitE2ETests {
             notes: "Created by E2E test",
             isAllDay: false
         )
+        let eventID = created.id
+
+        // Ensure cleanup even on test failure
+        defer { cleanupEvent(identifier: eventID, store: ekStore) }
+
         #expect(created.title == "[MCP-TEST] E2E Event")
         #expect(created.location == "Test Location")
-        let eventID = created.id
 
         // List — should appear in range
         let events = await service.listEvents(
@@ -56,10 +78,16 @@ struct EventKitE2ETests {
 
     @Test("Reminder CRUD cycle")
     func reminderCRUDCycle() async throws {
-        let store = EventStore()
-        let remAccess = try await store.requestReminderAccess()
-        try #require(remAccess, "Reminders access denied — grant in System Settings")
+        let ekStore = EKEventStore()
+        if #available(macOS 14.0, *) {
+            let access = try await ekStore.requestFullAccessToReminders()
+            try #require(access, "Reminders access denied — grant in System Settings")
+        } else {
+            let access = try await ekStore.requestAccess(to: .reminder)
+            try #require(access, "Reminders access denied — grant in System Settings")
+        }
 
+        let store = EventStore()
         let service = EventKitService(store: store)
 
         // Create
@@ -70,9 +98,13 @@ struct EventKitE2ETests {
             priority: 5,
             notes: "Created by E2E test"
         )
+        let reminderID = created.id
+
+        // Ensure cleanup even on test failure
+        defer { cleanupReminder(identifier: reminderID, store: ekStore) }
+
         #expect(created.title == "[MCP-TEST] E2E Reminder")
         #expect(created.priority == 5)
-        let reminderID = created.id
 
         // List — should appear
         let reminders = await service.listReminders(calendarID: nil, completed: false)

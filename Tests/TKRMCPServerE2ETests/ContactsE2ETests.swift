@@ -1,3 +1,4 @@
+@preconcurrency import Contacts
 import Foundation
 import Testing
 @testable import TKRMCPServer
@@ -8,12 +9,27 @@ import Testing
 @Suite("Contacts E2E", .enabled(if: ProcessInfo.processInfo.environment["SKIP_E2E"] == nil))
 struct ContactsE2ETests {
 
+    /// Directly deletes a contact via CNContactStore (for cleanup outside actor context).
+    private func cleanupContact(identifier: String, store: CNContactStore) {
+        let predicate = CNContact.predicateForContacts(withIdentifiers: [identifier])
+        guard let contact = try? store.unifiedContacts(
+            matching: predicate,
+            keysToFetch: [CNContactIdentifierKey as CNKeyDescriptor]
+        ).first,
+            let mutable = contact.mutableCopy() as? CNMutableContact
+        else { return }
+        let request = CNSaveRequest()
+        request.delete(mutable)
+        try? store.execute(request)
+    }
+
     @Test("Contact CRUD cycle")
     func contactCRUDCycle() async throws {
-        let store = ContactStore()
-        let granted = try await store.requestAccess(for: .contacts)
+        let cnStore = CNContactStore()
+        let granted = try await cnStore.requestAccess(for: .contacts)
         try #require(granted, "Contacts access denied — grant in System Settings")
 
+        let store = ContactStore()
         let service = ContactsService(store: store)
 
         // Create
@@ -26,9 +42,13 @@ struct ContactsE2ETests {
             phones: [("mobile", "+15550000")],
             notes: nil
         )
+        let contactID = created.id
+
+        // Ensure cleanup even on test failure
+        defer { cleanupContact(identifier: contactID, store: cnStore) }
+
         #expect(created.givenName == "__MCPTEST__")
         #expect(created.familyName == "E2EContact")
-        let contactID = created.id
 
         // Read
         let fetched = try await service.getContact(identifier: contactID)

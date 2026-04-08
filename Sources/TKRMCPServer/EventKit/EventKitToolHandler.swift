@@ -53,11 +53,16 @@ enum EventKitToolHandler {
         ),
         Tool(
             name: "delete_event",
-            description: "Delete a calendar event by its ID.",
+            description: "Delete a calendar event by its ID. Use span to control recurring event behavior.",
             inputSchema: .object([
                 "type": "object",
                 "properties": .object([
                     "eventID": .object(["type": "string"]),
+                    "span": .object([
+                        "type": "string",
+                        "enum": .array([.string("this"), .string("future")]),
+                        "description": "For recurring events: 'this' (default) or 'future' to also delete future occurrences",
+                    ]),
                 ]),
                 "required": .array([.string("eventID")]),
             ])
@@ -119,11 +124,14 @@ enum EventKitToolHandler {
         service: EventKitService
     ) async throws -> String {
         let args = params.arguments ?? [:]
-        let fmt = ISO8601DateFormatter()
+        let fmt = iso8601Formatter
 
         switch params.name {
         case "list_calendars":
             let typeStr = args["type"]?.stringValue ?? "event"
+            guard typeStr == "event" || typeStr == "reminder" else {
+                throw ToolError.invalidArguments("type must be 'event' or 'reminder', got '\(typeStr)'")
+            }
             let entityType: EKEntityType = typeStr == "reminder" ? .reminder : .event
             let calendars = await service.listCalendars(for: entityType)
             return try encodeJSON(calendars)
@@ -147,7 +155,15 @@ enum EventKitToolHandler {
                   let start = fmt.date(from: startStr),
                   let end = fmt.date(from: endStr)
             else {
-                throw ToolError.invalidArguments("title, startDate, endDate required")
+                throw ToolError.invalidArguments("title, startDate, endDate required in ISO 8601 format")
+            }
+            guard end >= start else {
+                throw ToolError.invalidArguments("endDate must be equal to or after startDate")
+            }
+            if let calID = args["calendarID"]?.stringValue {
+                guard await service.calendarExists(identifier: calID) else {
+                    throw ToolError.notFound("Calendar '\(calID)' not found")
+                }
             }
             let event = try await service.createEvent(
                 title: title,
@@ -164,7 +180,8 @@ enum EventKitToolHandler {
             guard let eventID = args["eventID"]?.stringValue else {
                 throw ToolError.invalidArguments("eventID required")
             }
-            let deleted = try await service.deleteEvent(eventID: eventID)
+            let span: EKSpan = args["span"]?.stringValue == "future" ? .futureEvents : .thisEvent
+            let deleted = try await service.deleteEvent(eventID: eventID, span: span)
             return try encodeJSON(["deleted": deleted])
 
         case "list_reminders":
@@ -192,7 +209,9 @@ enum EventKitToolHandler {
             guard let reminderID = args["reminderID"]?.stringValue else {
                 throw ToolError.invalidArguments("reminderID required")
             }
-            let completed = args["completed"]?.boolValue ?? true
+            guard let completed = args["completed"]?.boolValue else {
+                throw ToolError.invalidArguments("completed (boolean) is required")
+            }
             let success = try await service.completeReminder(reminderID: reminderID, completed: completed)
             return try encodeJSON(["success": success])
 
