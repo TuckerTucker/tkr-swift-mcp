@@ -21,7 +21,7 @@ actor HTTPServerApp {
 
         init(
             host: String = "127.0.0.1",
-            port: Int = 4100,
+            port: Int = 42124,
             endpoint: String = "/mcp",
             sessionTimeout: TimeInterval = 3600
         ) {

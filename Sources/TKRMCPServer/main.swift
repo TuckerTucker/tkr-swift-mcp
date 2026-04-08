@@ -12,7 +12,7 @@ LoggingSystem.bootstrap { label in
 let logger = Logger(label: "com.tkr-mcp-server")
 
 // Parse --port flag (default 4100)
-var port = 4100
+var port = 42124
 for (index, arg) in CommandLine.arguments.enumerated() {
     if arg == "--port", index + 1 < CommandLine.arguments.count,
        let p = Int(CommandLine.arguments[index + 1]) {
