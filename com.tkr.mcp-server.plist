@@ -8,11 +8,7 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/open</string>
-    <string>-W</string>
-    <string>-a</string>
-    <string>/Users/plexariffic/@tkr-dev/tkr-swift-mcp/.build/release/TKRMCPServer.app</string>
-    <string>--args</string>
+    <string>/Users/plexariffic/@tkr-dev/tkr-swift-mcp/.build/release/TKRMCPServer.app/Contents/MacOS/TKRMCPServer</string>
     <string>--port</string>
     <string>42124</string>
   </array>
