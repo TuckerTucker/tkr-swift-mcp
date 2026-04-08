@@ -2,6 +2,20 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.tkr.mcp-server</string>
+    <key>CFBundleExecutable</key>
+    <string>TKRMCPServer</string>
+    <key>CFBundleName</key>
+    <string>TKRMCPServer</string>
+    <key>CFBundleVersion</key>
+    <string>1.0.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>LSBackgroundOnly</key>
+    <true/>
     <key>NSContactsUsageDescription</key>
     <string>This MCP server needs access to your contacts to search, create, and manage them.</string>
     <key>NSCalendarsUsageDescription</key>

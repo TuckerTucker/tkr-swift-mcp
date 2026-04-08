@@ -6,3 +6,4 @@ Package.resolved
 *.xcworkspace/
 DerivedData/
 xcuserdata/
+.vscode/
