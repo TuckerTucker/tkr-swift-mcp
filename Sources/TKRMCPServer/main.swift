@@ -15,18 +15,17 @@ let logger = Logger(label: "com.tkr-mcp-server")
 let contactStore = ContactStore()
 let eventStore = EventStore()
 
-// Request permissions up front
-let contactsAccess = try await contactStore.requestAccess(for: .contacts)
-guard contactsAccess else {
-    logger.error("Contacts access denied. Grant in System Settings > Privacy & Security > Contacts.")
-    Foundation.exit(1)
+// Request permissions up front — log warnings but don't exit, so the MCP
+// server stays alive and returns actionable errors at the tool level.
+let contactsAccess = (try? await contactStore.requestAccess(for: .contacts)) ?? false
+if !contactsAccess {
+    logger.warning("Contacts access denied. Grant in System Settings > Privacy & Security > Contacts.")
 }
 
-let calendarAccess = try await eventStore.requestCalendarAccess()
-let reminderAccess = try await eventStore.requestReminderAccess()
-guard calendarAccess && reminderAccess else {
-    logger.error("EventKit access denied. Grant in System Settings > Privacy & Security > Calendars / Reminders.")
-    Foundation.exit(1)
+let calendarAccess = (try? await eventStore.requestCalendarAccess()) ?? false
+let reminderAccess = (try? await eventStore.requestReminderAccess()) ?? false
+if !calendarAccess || !reminderAccess {
+    logger.warning("EventKit access denied. Grant in System Settings > Privacy & Security > Calendars / Reminders.")
 }
 
 // Create services with production stores
