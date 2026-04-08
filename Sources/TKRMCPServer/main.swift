@@ -3,20 +3,28 @@ import Logging
 import MCP
 import ServiceLifecycle
 
-// Configure logging to stderr (stdout is reserved for MCP protocol)
+// Configure logging to stderr
 LoggingSystem.bootstrap { label in
     var handler = StreamLogHandler.standardError(label: label)
-    handler.logLevel = .warning
+    handler.logLevel = .info
     return handler
 }
 let logger = Logger(label: "com.tkr-mcp-server")
+
+// Parse --port flag (default 4100)
+var port = 4100
+for (index, arg) in CommandLine.arguments.enumerated() {
+    if arg == "--port", index + 1 < CommandLine.arguments.count,
+       let p = Int(CommandLine.arguments[index + 1]) {
+        port = p
+    }
+}
 
 // Create production stores
 let contactStore = ContactStore()
 let eventStore = EventStore()
 
-// Request permissions up front — log warnings but don't exit, so the MCP
-// server stays alive and returns actionable errors at the tool level.
+// Request permissions — log warnings but don't exit.
 let contactsAccess = (try? await contactStore.requestAccess(for: .contacts)) ?? false
 if !contactsAccess {
     logger.warning("Contacts access denied. Grant in System Settings > Privacy & Security > Contacts.")
@@ -32,26 +40,24 @@ if !calendarAccess || !reminderAccess {
 let contactsService = ContactsService(store: contactStore)
 let eventKitService = EventKitService(store: eventStore)
 
-// Assemble MCP server
-let server = await createServer(
-    contactsService: contactsService,
-    eventKitService: eventKitService
+// Start HTTP MCP server
+let app = HTTPServerApp(
+    configuration: .init(host: "127.0.0.1", port: port, endpoint: "/mcp"),
+    serverFactory: { _, _ in
+        await createServer(contactsService: contactsService, eventKitService: eventKitService)
+    },
+    logger: logger
 )
 
-// Start via stdio transport
-let transport = StdioTransport(logger: logger)
-
-struct MCPService: Service {
-    let server: Server
-    let transport: StdioTransport
+struct MCPHTTPService: Service {
+    let app: HTTPServerApp
     func run() async throws {
-        try await server.start(transport: transport)
-        try await Task.sleep(for: .seconds(365 * 24 * 3600))
+        try await app.start()
     }
 }
 
 let serviceGroup = ServiceGroup(
-    services: [MCPService(server: server, transport: transport)],
+    services: [MCPHTTPService(app: app)],
     gracefulShutdownSignals: [.sigterm, .sigint],
     logger: logger
 )
